@@ -12,7 +12,7 @@ from groq import Groq
 from concurrent.futures import ThreadPoolExecutor
 
 # ✅ Initialize Groq Client
-client = Groq(api_key="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")
+client = Groq(api_key="YourLLM")
 
 # ✅ CSV File for Conversation History
 csv_file_path = "conversation_history.csv"
