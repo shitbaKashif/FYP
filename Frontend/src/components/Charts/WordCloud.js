@@ -9,115 +9,85 @@ const WordCloud = ({ data, query }) => {
   const [error, setError] = useState('');
   const svgRef = useRef(null);
 
-  // Data parsing logic - kept the same as it works well
+  // Custom spiral layout function
+  const spiralLayout = (width, height, spacing) => {
+    return (index) => {
+      const radius = spacing * Math.sqrt(index);
+      const theta = index * 2.4;
+      return [
+        width / 2 + radius * Math.cos(theta),
+        height / 2 + radius * Math.sin(theta)
+      ];
+    };
+  };
+
   useEffect(() => {
     const parseData = () => {
       try {
         setLoading(true);
         setError('');
         
-        // Deep extraction of text content from any data type
-        const extractTextContent = (input) => {
-          if (!input) return '';
-          
-          // Direct string
-          if (typeof input === 'string') return input;
-          
-          // If it's an object with a response property (common pattern in API responses)
-          if (typeof input === 'object') {
-            // Log the object for debugging
-            console.log("WordCloud received object:", JSON.stringify(input).substring(0, 200));
-            
-            // Try the response property first (most common case)
-            if (input.response && typeof input.response === 'string') {
-              return input.response;
+        // Handle different data formats
+        let textContent = '';
+        
+        if (typeof data === 'string') {
+          textContent = data;
+        } else if (Array.isArray(data)) {
+          // If it's an array of objects, extract text from name/value pairs
+          textContent = data.map(item => {
+            if (typeof item === 'object') {
+              return `${item.name || ''} ${item.value || ''}`;
             }
-            
-            // Try text property
-            if (input.text && typeof input.text === 'string') {
-              return input.text;
-            }
-            
-            // Try content property
-            if (input.content && typeof input.content === 'string') {
-              return input.content;
-            }
-            
-            // If object has a toString method that's been overridden
-            const stringValue = input.toString();
-            if (stringValue !== '[object Object]') {
-              return stringValue;
-            }
-            
+            return String(item);
+          }).join(' ');
+        } else if (typeof data === 'object') {
+          // Handle object data
+          if (data.response) {
+            textContent = data.response;
+          } else if (data.text) {
+            textContent = data.text;
+          } else if (data.content) {
+            textContent = data.content;
+          } else {
             // Extract all string values from object
-            return Object.values(input)
-              .filter(val => typeof val === 'string')
-              .join(' ') || JSON.stringify(input);
+            textContent = Object.entries(data)
+              .map(([key, value]) => `${key} ${value}`)
+              .join(' ');
           }
-          
-          // Default fallback
-          return String(input);
-        };
+        }
         
-        // Extract text from any type of data structure
-        const textContent = extractTextContent(data);
+        console.log("Processing text content:", textContent.substring(0, 100) + "...");
         
-        console.log("Extracted text content:", textContent.substring(0, 100) + "...");
-        
-        // Remove markdown formatting symbols
-        const cleanedText = textContent
-          .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markers but keep content
-          .replace(/\*(.*?)\*/g, '$1')     // Remove italic markers but keep content
-          .replace(/\[(.*?)\]\((.*?)\)/g, '$1') // Remove links but keep text
-          .replace(/```.*?```/gs, '');     // Remove code blocks
-        
-        // Remove common punctuation and convert to lowercase
-        const cleanText = cleanedText
+        // Clean and process text
+        const cleanText = textContent
           .toLowerCase()
           .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
-          .replace(/\s{2,}/g, ' ');
+          .replace(/\s{2,}/g, ' ')
+          .trim();
         
-        // Split into words
-        const wordArray = cleanText.split(' ');
-        
-        // Define common stop words to filter out
-        const stopWords = new Set([
-          'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with',
-          'by', 'about', 'as', 'if', 'of', 'from', 'is', 'was', 'were', 'are', 'be',
-          'been', 'being', 'that', 'this', 'these', 'those', 'it', 'its', 'they',
-          'them', 'their', 'we', 'our', 'you', 'your', 'i', 'my', 'me', 'he', 'him',
-          'his', 'she', 'her', 'object', 'objects', 'function', 'string', 'number',
-          'null', 'undefined', 'prototype', 'array'
-        ]);
-        
-        // Count word frequencies, excluding stop words and words less than 3 chars
+        // Split into words and count frequencies
         const wordCounts = {};
-        wordArray.forEach(word => {
-          if (word.length > 2 && !stopWords.has(word)) {
+        const words = cleanText.split(/\s+/);
+        
+        words.forEach(word => {
+          if (word.length > 2) {
             wordCounts[word] = (wordCounts[word] || 0) + 1;
           }
         });
         
-        // Convert to array of objects with size based on frequency
-        const wordObjects = Object.keys(wordCounts).map(word => ({
-          text: word,
-          value: wordCounts[word]
-        }));
-        
-        // Sort by frequency and take top 50
-        const topWords = wordObjects
+        // Convert to array and sort by frequency
+        const wordArray = Object.entries(wordCounts)
+          .map(([text, value]) => ({ text, value }))
           .sort((a, b) => b.value - a.value)
-          .slice(0, 50);
+          .slice(0, 100); // Take top 100 words
         
-        console.log(`Found ${topWords.length} words for cloud`);
-        
-        if (topWords.length > 0) {
-          setWords(topWords);
+        if (wordArray.length > 0) {
+          setWords(wordArray);
         } else {
-          setError('Could not extract meaningful words from the response.');
+          setError('No meaningful words found in the data');
         }
       } catch (err) {
-        console.error('Error parsing data for word cloud:', err);
+        console.error('Error processing word cloud data:', err);
         setError('Failed to process data for visualization');
       } finally {
         setLoading(false);
@@ -132,7 +102,6 @@ const WordCloud = ({ data, query }) => {
     }
   }, [data]);
 
-  // Improved visualization rendering using D3 for layout
   useEffect(() => {
     if (!words.length || !svgRef.current) return;
 
@@ -153,110 +122,52 @@ const WordCloud = ({ data, query }) => {
       .domain([minValue, maxValue])
       .range([16, 60]);
 
-    // Create a spiral layout for word placement
+    // Create spiral layout
+    const spiral = spiralLayout(width, height, 5);
+
+    // Place words in a spiral pattern
     const positions = [];
-    const maxRadius = Math.min(width, height) / 2;
-    const angleIncrement = 0.1;
-    const radiusIncrement = 0.5;
-    
-    // Setup the cloud layout
-    let angle = 0;
-    let radius = 5;
-    angle += angleIncrement;
-    radius += radiusIncrement;
-
-    // Check if radius exceeds the maximum boundary
-    if (radius > maxRadius) {
-      radius = maxRadius * 0.8; 
-    }
-
-    const centerX = width / 2;
-    const centerY = height / 2;
-    
-    // Place the words along a spiral
     words.forEach((word, i) => {
-      // Calculate position along spiral
-      let placed = false;
-      let attempts = 0;
-      let wordX, wordY;
-      const wordSize = fontScale(word.value);
-      
-      while (!placed && attempts < 1000) {
-        wordX = centerX + radius * Math.cos(angle);
-        wordY = centerY + radius * Math.sin(angle);
-        
-        // Check if this position collides with any previous words
-        let collision = false;
-        for (let j = 0; j < positions.length; j++) {
-          const pos = positions[j];
-          const dx = wordX - pos.x;
-          const dy = wordY - pos.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          
-          // Use font size to determine collision boundary
-          const minDistance = (wordSize + pos.size) / 2;
-          
-          if (distance < minDistance) {
-            collision = true;
-            break;
-          }
-        }
-        
-        if (!collision) {
-          placed = true;
-          positions.push({
-            x: wordX, 
-            y: wordY,
-            size: wordSize
-          });
-        } else {
-          // Move along the spiral
-          angle += angleIncrement;
-          radius += radiusIncrement;
-          attempts++;
-        }
-      }
-      
-      if (!placed) {
-        // Fallback if couldn't place without collision
-        wordX = centerX + (Math.random() - 0.5) * width * 0.8;
-        wordY = centerY + (Math.random() - 0.5) * height * 0.8;
+      const point = spiral(i);
+      if (point) {
         positions.push({
-          x: wordX, 
-          y: wordY,
-          size: wordSize
+          x: point[0],
+          y: point[1],
+          text: word.text,
+          value: word.value,
+          size: fontScale(word.value)
         });
       }
-      
-      // Add the word to the SVG
-      svg.append('text')
-        .attr('x', wordX)
-        .attr('y', wordY)
-        .attr('font-size', `${wordSize}px`)
-        .attr('fill', colorScale(i % 10))
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .attr('font-family', 'Arial, sans-serif')
-        .attr('font-weight', 'bold')
-        .style('cursor', 'pointer')
-        .text(word.text)
-        .on('mouseover', function() {
-          d3.select(this)
-            .transition()
-            .duration(200)
-            .attr('font-size', `${wordSize * 1.1}px`)
-            .attr('fill', d3.color(colorScale(i % 10)).brighter(0.5));
-        })
-        .on('mouseout', function() {
-          d3.select(this)
-            .transition()
-            .duration(200)
-            .attr('font-size', `${wordSize}px`)
-            .attr('fill', colorScale(i % 10));
-        })
-        .append('title')
-        .text(`${word.text} (${word.value})`);
     });
+
+    // Add words to SVG
+    svg.selectAll("text")
+      .data(positions)
+      .join("text")
+      .attr("x", d => d.x)
+      .attr("y", d => d.y)
+      .attr("font-size", d => `${d.size}px`)
+      .attr("fill", (d, i) => colorScale(i % 10))
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "middle")
+      .style("cursor", "pointer")
+      .text(d => d.text)
+      .on("mouseover", function(event, d) {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr("font-size", `${d.size * 1.1}px`)
+          .attr("fill", d3.color(colorScale(d.value % 10)).brighter(0.5));
+      })
+      .on("mouseout", function(event, d) {
+        d3.select(this)
+          .transition()
+          .duration(200)
+          .attr("font-size", `${d.size}px`)
+          .attr("fill", colorScale(d.value % 10));
+      })
+      .append("title")
+      .text(d => `${d.text} (${d.value})`);
 
   }, [words]);
 

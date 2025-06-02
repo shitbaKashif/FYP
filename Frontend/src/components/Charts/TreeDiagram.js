@@ -62,129 +62,189 @@ const TreeDiagram = ({ data, query }) => {
       // Clear previous visualization
       d3.select(d3Container.current).selectAll('*').remove();
 
-      // Convert flat data to hierarchical structure
-      // For a simple visualization, we'll create a tree with a root node and direct children
-      const treeData = {
-        name: "Root",
-        children: chartData.map(item => ({
+      // Use hierarchical data if available, or wrap flat data in a root node
+      const treeData = chartData.children ? chartData : {
+        name: chartTitle || "Root",
+        children: Array.isArray(chartData) ? chartData.map(item => ({
           name: item.name,
           value: item.value
-        }))
+        })) : [{ name: "No data", value: 0 }]
       };
 
       // Set up dimensions
-      const width = 800;
-      const height = 600;
-      const margin = { top: 40, right: 90, bottom: 50, left: 90 };
-      const innerWidth = width - margin.left - margin.right;
-      const innerHeight = height - margin.top - margin.bottom;
+      const width = 928;
+      const height = 680;
+      const marginTop = 10;
+      const marginRight = 10;
+      const marginBottom = 10;
+      const marginLeft = 40;
+      
+      // Create a hierarchy from the data
+      const root = d3.hierarchy(treeData);
+      
+      // Calculate parameters for horizontal tree layout
+      const dx = 18; // Node size (height)
+      const dy = (width - marginRight - marginLeft) / (1 + root.height); // Distance between levels
+      
+      // Create tree layout and link shape generator
+      const tree = d3.tree().nodeSize([dx, dy]);
+      const diagonal = d3.linkHorizontal()
+        .x(d => d.y)
+        .y(d => d.x);
       
       // Create SVG
       const svg = d3.select(d3Container.current)
         .append('svg')
         .attr('width', width)
         .attr('height', height)
-        .append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
+        .attr('viewBox', [-marginLeft, -marginTop, width, height])
+        .attr('style', 'max-width: 100%; height: auto; font: 10px sans-serif; user-select: none;');
       
-      // Create tree layout
-      const tree = d3.tree()
-        .size([innerWidth, innerHeight]);
+      // Create layers for links and nodes
+      const gLink = svg.append("g")
+        .attr("fill", "none")
+        .attr("stroke", "#555")
+        .attr("stroke-opacity", 0.4)
+        .attr("stroke-width", 1.5);
       
-      // Create root node hierarchy
-      const root = d3.hierarchy(treeData);
+      const gNode = svg.append("g")
+        .attr("cursor", "pointer")
+        .attr("pointer-events", "all");
       
-      // Assign positions to nodes
-      const treeRoot = tree(root);
+      // Initialize node positions for animation
+      root.x0 = dy / 2;
+      root.y0 = 0;
       
-      // Add links (edges)
-      svg.selectAll('.link')
-        .data(treeRoot.links())
-        .join('path')
-        .attr('class', 'link')
-        .attr('d', d3.linkVertical()
-          .x(d => d.x)
-          .y(d => d.y)
-        )
-        .attr('fill', 'none')
-        .attr('stroke', '#ccc')
-        .attr('stroke-width', 2);
+      // Assign IDs to nodes and prepare for collapsible tree
+      root.descendants().forEach((d, i) => {
+        d.id = i;
+        d._children = d.children;
+        // Initially collapsed deep nodes
+        if (d.depth && d.depth > 1) d.children = null;
+      });
       
-      // Add nodes
-      const nodes = svg.selectAll('.node')
-        .data(treeRoot.descendants())
-        .join('g')
-        .attr('class', 'node')
-        .attr('transform', d => `translate(${d.x},${d.y})`)
-        .style('cursor', 'pointer');
-      
-      // Add node circles
-      nodes.append('circle')
-        .attr('r', d => d.depth === 0 ? 15 : 10)
-        .attr('fill', d => d.depth === 0 ? '#4682B4' : '#69b3a2')
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 2);
-      
-      // Add node labels
-      nodes.append('text')
-        .attr('dy', d => d.depth === 0 ? 25 : -15)
-        .attr('text-anchor', 'middle')
-        .text(d => d.data.name)
-        .style('font-size', '12px')
-        .style('fill', '#333');
-      
-      // Add value labels for child nodes
-      nodes.filter(d => d.depth > 0)
-        .append('text')
-        .attr('dy', 25)
-        .attr('text-anchor', 'middle')
-        .text(d => d.data.value)
-        .style('font-size', '10px')
-        .style('fill', '#666');
-      
-      // Add tooltips
-      const tooltip = d3.select(d3Container.current)
-        .append('div')
-        .attr('class', 'tooltip')
-        .style('opacity', 0)
-        .style('position', 'absolute')
-        .style('background-color', 'white')
-        .style('border', 'solid')
-        .style('border-width', '1px')
-        .style('border-radius', '5px')
-        .style('padding', '10px');
-      
-      // Add hover interactions
-      nodes
-        .on('mouseover', function(event, d) {
-          d3.select(this).select('circle')
-            .attr('r', d => d.depth === 0 ? 18 : 12)
-            .attr('stroke', '#333');
-          
-          const tooltipContent = d.depth === 0 
-            ? `<strong>${d.data.name}</strong><br>Root Node` 
-            : `<strong>${d.data.name}</strong><br>Value: ${d.data.value}`;
-          
-          tooltip
-            .style('opacity', 1)
-            .html(tooltipContent)
-            .style('left', (event.pageX + 10) + 'px')
-            .style('top', (event.pageY - 15) + 'px');
-        })
-        .on('mousemove', function(event) {
-          tooltip
-            .style('left', (event.pageX + 10) + 'px')
-            .style('top', (event.pageY - 15) + 'px');
-        })
-        .on('mouseleave', function(event, d) {
-          d3.select(this).select('circle')
-            .attr('r', d => d.depth === 0 ? 15 : 10)
-            .attr('stroke', '#fff');
-          
-          tooltip.style('opacity', 0);
+      // Update function to handle tree rendering and transitions
+      function update(event, source) {
+        const duration = event?.altKey ? 2500 : 250; // hold alt to slow animation
+        const nodes = root.descendants().reverse();
+        const links = root.links();
+        
+        // Compute the new tree layout
+        tree(root);
+        
+        // Find the left-most and right-most nodes to determine height
+        let left = root;
+        let right = root;
+        root.eachBefore(node => {
+          if (node.x < left.x) left = node;
+          if (node.x > right.x) right = node;
         });
+        
+        const height = right.x - left.x + marginTop + marginBottom;
+        
+        // Transition the entire tree
+        const transition = svg.transition()
+          .duration(duration)
+          .attr("height", height)
+          .attr("viewBox", [-marginLeft, left.x - marginTop, width, height])
+          .tween("resize", window.ResizeObserver ? null : () => () => svg.dispatch("toggle"));
+        
+        // Update nodes
+        const node = gNode.selectAll("g")
+          .data(nodes, d => d.id);
+        
+        // Enter new nodes at the parent's previous position
+        const nodeEnter = node.enter().append("g")
+          .attr("transform", d => `translate(${source.y0},${source.x0})`)
+          .attr("fill-opacity", 0)
+          .attr("stroke-opacity", 0)
+          .on("click", (event, d) => {
+            d.children = d.children ? null : d._children;
+            update(event, d);
+          });
+        
+        // Add circles for nodes
+        nodeEnter.append("circle")
+          .attr("r", 4)
+          .attr("fill", d => d._children ? "#555" : "#999")
+          .attr("stroke-width", 10);
+        
+        // Add text labels
+        nodeEnter.append("text")
+          .attr("dy", "0.31em")
+          .attr("x", d => d._children ? -6 : 6)
+          .attr("text-anchor", d => d._children ? "end" : "start")
+          .text(d => d.data.name)
+          .clone(true).lower()
+          .attr("stroke", "white")
+          .attr("stroke-width", 3);
+        
+        // Add value labels for leaf nodes
+        nodeEnter.filter(d => !d._children && d.data.value)
+          .append("text")
+          .attr("dy", "1.1em")
+          .attr("x", 6)
+          .attr("text-anchor", "start")
+          .attr("fill", "#999")
+          .text(d => `(${d.data.value})`)
+          .clone(true).lower()
+          .attr("stroke", "white")
+          .attr("stroke-width", 3);
+        
+        // Transition nodes to their new positions
+        const nodeUpdate = node.merge(nodeEnter).transition(transition)
+          .attr("transform", d => `translate(${d.y},${d.x})`)
+          .attr("fill-opacity", 1)
+          .attr("stroke-opacity", 1);
+        
+        // Transition exiting nodes to the parent's new position and remove
+        const nodeExit = node.exit().transition(transition).remove()
+          .attr("transform", d => `translate(${source.y},${source.x})`)
+          .attr("fill-opacity", 0)
+          .attr("stroke-opacity", 0);
+        
+        // Update links
+        const link = gLink.selectAll("path")
+          .data(links, d => d.target.id);
+        
+        // Enter new links at the parent's previous position
+        const linkEnter = link.enter().append("path")
+          .attr("d", d => {
+            const o = {x: source.x0, y: source.y0};
+            return diagonal({source: o, target: o});
+          });
+        
+        // Transition links to their new positions
+        link.merge(linkEnter).transition(transition)
+          .attr("d", diagonal);
+        
+        // Transition exiting links to the parent's new position and remove
+        link.exit().transition(transition).remove()
+          .attr("d", d => {
+            const o = {x: source.x, y: source.y};
+            return diagonal({source: o, target: o});
+          });
+        
+        // Store the old positions for transition
+        root.eachBefore(d => {
+          d.x0 = d.x;
+          d.y0 = d.y;
+        });
+      }
+      
+      // Initial update to render the tree
+      update(null, root);
+      
+      // Add title
+      svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", 20)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "16px")
+        .attr("font-weight", "bold")
+        .text(chartTitle);
     }
-  }, [chartData, loading, error]);
+  }, [chartData, loading, error, chartTitle]);
 
   if (loading) {
     return <div className="chart-loading">Processing data for tree diagram...</div>;

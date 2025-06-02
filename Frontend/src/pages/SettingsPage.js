@@ -5,7 +5,20 @@ import Footer from '../components/Common/Footer';
 import Button from '../components/Common/Button';
 import { useAuth } from '../context/AuthContext';
 import { updateUserPassword } from '../services/firebase';
+import { downloadSvgChartAsPng } from '../utils/downloadChartAsPng';
 import '../styles/App.css';
+
+// Helper to find the first SVG chart in the DOM
+function getFirstChartSvg() {
+  // Try to find a visible SVG in the visualization panel
+  const panel = document.querySelector('.visualization-display, .scrollable-chart-area');
+  if (panel) {
+    const svg = panel.querySelector('svg');
+    return svg;
+  }
+  // Fallback: find any SVG on the page
+  return document.querySelector('svg');
+}
 
 const SettingsPage = () => {
   const { currentUser, userData } = useAuth();
@@ -13,6 +26,7 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [downloadMsg, setDownloadMsg] = useState('');
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -33,6 +47,18 @@ const SettingsPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Download chart as PNG handler
+  const handleDownloadChart = () => {
+    setDownloadMsg('');
+    const svg = getFirstChartSvg();
+    if (!svg) {
+      setDownloadMsg('No chart found to download. Please view a chart first.');
+      return;
+    }
+    downloadSvgChartAsPng(svg, 'chart.png');
+    setDownloadMsg('Chart download started!');
   };
 
   return (
@@ -130,6 +156,21 @@ const SettingsPage = () => {
               >
                 Download Data
               </Button>
+            </div>
+            
+            <div className="data-option">
+              <h3>Download Your Charts</h3>
+              <p>
+                Download the currently visible chart as a PNG image. Make sure the chart you want is visible in the visualization panel.
+              </p>
+              <Button
+                buttonStyle="btn--outline"
+                buttonSize="btn--medium"
+                onClick={handleDownloadChart}
+              >
+                Download Chart as PNG
+              </Button>
+              {downloadMsg && <div style={{ marginTop: 8, color: '#4a6eb5', fontSize: '0.97rem' }}>{downloadMsg}</div>}
             </div>
           </div>
         </div>

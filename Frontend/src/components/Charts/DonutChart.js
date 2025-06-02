@@ -96,26 +96,43 @@ const DonutChart = ({ data, query }) => {
     }
   };
 
-  // Custom label to show percentages
-  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
+  // Custom label to show outside the arc, truncate, and add tooltip
+  const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, index, name }) => {
     const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const radius = outerRadius + 20;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
+    const label = name.length > 16 ? name.substring(0, 13) + '...' : name;
     return (
-      <text 
-        x={x} 
-        y={y} 
-        fill="white" 
-        textAnchor={x > cx ? 'start' : 'end'} 
-        dominantBaseline="central"
-        fontSize={12}
-      >
-        {`${(percent * 100).toFixed(1)}%`}
-      </text>
+      <g>
+        <text
+          x={x}
+          y={y}
+          fill="#333"
+          textAnchor={x > cx ? 'start' : 'end'}
+          dominantBaseline="central"
+          fontSize={Math.max(10, 16 - Math.floor(chartData.length / 10))}
+        >
+          {label}
+        </text>
+        <title>{name}</title>
+      </g>
     );
   };
+
+  // Custom label line
+  const renderLabelLine = ({ cx, cy, midAngle, outerRadius }) => {
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 10;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return <line x1={cx} y1={cy} x2={x} y2={y} stroke="#888" strokeWidth={1} />;
+  };
+
+  // Limit the number of visible labels if too many slices
+  const maxLabels = 15;
+  const visibleData = chartData.slice(0, maxLabels);
+  const hiddenData = chartData.length > maxLabels ? chartData.slice(maxLabels) : [];
 
   return (
     <div className="chart-container">
@@ -126,18 +143,19 @@ const DonutChart = ({ data, query }) => {
       <ResponsiveContainer width="100%" height={400}>
         <PieChart>
           <Pie
-            data={chartData}
+            data={visibleData}
             cx="50%"
             cy="50%"
-            labelLine={false}
+            labelLine={renderLabelLine}
             label={renderCustomizedLabel}
             outerRadius={150}
             innerRadius={60}
             fill="#8884d8"
             dataKey="value"
             nameKey="name"
+            isAnimationActive={false}
           >
-            {chartData.map((entry, index) => (
+            {visibleData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
             ))}
           </Pie>
@@ -145,6 +163,11 @@ const DonutChart = ({ data, query }) => {
           <Legend />
         </PieChart>
       </ResponsiveContainer>
+      {hiddenData.length > 0 && (
+        <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
+          +{hiddenData.length} more categories not shown. See legend for details.
+        </div>
+      )}
     </div>
   );
 };

@@ -17,24 +17,35 @@ import {
   where, 
   getDocs,
   enableNetwork,
-  disableNetwork
+  disableNetwork,
+  CACHE_SIZE_UNLIMITED,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager 
 } from 'firebase/firestore';
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyD2k0DQCZxosiwHYsDAVPN6ZF57SguyHDc",
-  authDomain: "data-tails.firebaseapp.com",
-  projectId: "data-tails",
-  storageBucket: "data-tails.firebasestorage.app",
-  messagingSenderId: "790602042259",
-  appId: "1:790602042259:web:60c1ae2b5b7927dab8b666",
-  measurementId: "G-DBXEPD5QX7"
+  apiKey: "AIzaSyDGT14SiCyZZeacCUMfvh10ZEVlipHn5PI",
+  authDomain: "fyp-dt-1f493.firebaseapp.com",
+  projectId: "fyp-dt-1f493",
+  storageBucket: "fyp-dt-1f493.firebasestorage.app",
+  messagingSenderId: "134618746457",
+  appId: "1:134618746457:web:908ab3c517cedad1d9eb48",
+  measurementId: "G-5BP9YLL94W"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+
+// Initialize Firestore with explicit settings to prevent "Unexpected state" errors
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+    tabManager: persistentMultipleTabManager()
+  })
+});
 
 // Network connection handling
 export const connectFirestore = async () => {
@@ -58,10 +69,26 @@ export const disconnectFirestore = async () => {
 // Error handling wrapper for Firestore operations
 const handleFirestoreError = async (operation) => {
   try {
-    await enableNetwork(db);
+    // Only enable network if it's expected to be connected
     return await operation();
   } catch (error) {
     console.error('Firestore operation failed:', error);
+    
+    // If error is related to connectivity or state issues, try reconnecting
+    if (error.message && (
+        error.message.includes('INTERNAL ASSERTION FAILED') || 
+        error.message.includes('network error') || 
+        error.message.includes('operation was rejected')
+      )) {
+      try {
+        await enableNetwork(db);
+        return await operation();
+      } catch (retryError) {
+        console.error('Retry failed:', retryError);
+        throw retryError;
+      }
+    }
+    
     throw error;
   }
 };

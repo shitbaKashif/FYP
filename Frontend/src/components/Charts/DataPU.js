@@ -1,8 +1,4 @@
 /**
- * Unified data processing utility for chart components
- */
-
-/**
  * Main function to process input data into chartable format
  * @param {any} data - The input data in any format
  * @param {any} query - Additional query information that might contain the response
@@ -20,21 +16,38 @@ export const processChartData = (data, query) => {
 
     // Handle markdown data
     if (typeof data === 'string' && (data.includes('**') || data.includes('#') || data.includes('- '))) {
+      // The key fix: Check for hierarchical data first
+      if (containsHierarchicalData(data)) {
+        const result = enhancedExtractHierarchicalData(data);
+        console.log("Hierarchical data detected, processed result:", result);
+        return result;
+      }
       return processMarkdownData(data);
     }
     
     // First priority: Check for response property in data
     if (data && typeof data === 'object' && data.response) {
+      // Check for hierarchical data in response
+      if (typeof data.response === 'string' && containsHierarchicalData(data.response)) {
+        return enhancedExtractHierarchicalData(data.response);
+      }
       return processResponseData(data);
     }
     
     // Second priority: Check for response in query
     if (query && typeof query === 'object' && query.response) {
+      // Check for hierarchical data in query response
+      if (typeof query.response === 'string' && containsHierarchicalData(query.response)) {
+        return enhancedExtractHierarchicalData(query.response);
+      }
       return processResponseData(query);
     }
     
     // Third priority: Process the data directly
     if (typeof data === 'string') {
+      if (containsHierarchicalData(data)) {
+        return enhancedExtractHierarchicalData(data);
+      }
       return processTextData(data);
     } else if (Array.isArray(data)) {
       return processArrayData(data);
@@ -64,57 +77,279 @@ export const processAndSaveChartData = (data, query) => {
       return result;
     }
     
-    // Format data for different chart types
-    const barData = formatForBarChart(result.data);
-    const lineData = formatForLineChart(result.data);
-    const areaData = formatForAreaChart(result.data);
-    const donutData = formatForDonutChart(result.data);
-    const polarData = formatForPolarArea(result.data);
-    const heatmapData = formatForHeatmapChart(result.data);
-    const wordCloudData = formatForWordCloud(result.data);
+    // Force hierarchical flag if data has children property
+    if (result.data && result.data.children && Array.isArray(result.data.children)) {
+      console.log("Data has children property, forcing hierarchical flag");
+      result.isHierarchical = true;
+    }
     
-    // Store in localStorage with chart-specific formats
-    localStorage.setItem('Bar.json', JSON.stringify({
-      data: barData,
-      title: result.title,
-      source: result.source
-    }));
-    
-    localStorage.setItem('Line.json', JSON.stringify({
-      data: lineData,
-      title: result.title,
-      source: result.source
-    }));
-    
-    localStorage.setItem('Area.json', JSON.stringify({
-      data: areaData,
-      title: result.title,
-      source: result.source
-    }));
-    
-    localStorage.setItem('Donut.json', JSON.stringify({
-      data: donutData,
-      title: result.title,
-      source: result.source
-    }));
+    // Check if we have hierarchical data
+    if (result.isHierarchical) {
+      console.log("SAVING HIERARCHICAL DATA TO CHARTS");
+      
+      // For TreeMap, SunBurst and CirclePacking, store the hierarchical data directly
+      localStorage.setItem('TreeMap.json', JSON.stringify({
+        data: formatForTreeMap(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('TreeDiagram.json', JSON.stringify({
+        data: formatForTreeDiagram(result.data),
+        title: result.title,
+        source: result.source
+      }));
 
-    localStorage.setItem('Polar.json', JSON.stringify({
-      data: polarData,
-      title: result.title,
-      source: result.source
-    }));
-    
-    localStorage.setItem('Heatmap.json', JSON.stringify({
-      data: heatmapData,
-      title: result.title,
-      source: result.source
-    }));
-    
-    localStorage.setItem('WordCloud.json', JSON.stringify({
-      data: wordCloudData,
-      title: result.title,
-      source: result.source
-    }));
+      localStorage.setItem('SunBurst.json', JSON.stringify({
+        data: formatForSunburst(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('CirclePacking.json', JSON.stringify({
+        data: formatForCirclePacking(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      // For network-based charts, use the formatted data
+      localStorage.setItem('DAG.json', JSON.stringify({
+        data: formatForDAG(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('NetworkGraph.json', JSON.stringify({
+        data: formatForNetworkGraph(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('ChordDiagram.json', JSON.stringify({
+        data: formatForChordDiagram(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      // For other hierarchical visualizations
+      localStorage.setItem('ConnectionMap.json', JSON.stringify({
+        data: formatForConnectionMap(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('MosaicPlot.json', JSON.stringify({
+        data: formatForMosaicPlot(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      // For other charts, use flattened data
+      const flatData = flattenHierarchy(result.data);
+      
+      const barData = formatForBarChart(flatData);
+      const lineData = formatForLineChart(flatData);
+      const areaData = formatForAreaChart(flatData);
+      const donutData = formatForDonutChart(flatData);
+      const heatmapData = formatForHeatmapChart(flatData);
+      const wordCloudData = formatForWordCloud(flatData);
+      
+      localStorage.setItem('Bar.json', JSON.stringify({
+        data: barData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('Line.json', JSON.stringify({
+        data: lineData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('Area.json', JSON.stringify({
+        data: areaData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('Donut.json', JSON.stringify({
+        data: donutData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('Heatmap.json', JSON.stringify({
+        data: heatmapData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('WordCloud.json', JSON.stringify({
+        data: wordCloudData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      // Additional charts
+      localStorage.setItem('SmallMultiples.json', JSON.stringify({
+        data: formatForSmallMultiples(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('StackedArea.json', JSON.stringify({
+        data: formatForStackedArea(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('VoronoiMap.json', JSON.stringify({
+        data: formatForVoronoiMap(result.data),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('PolarArea.json', JSON.stringify({
+        data: formatForPolarArea(result.data),
+        title: result.title,
+        source: result.source
+      }));
+    } else {
+      // Processing for non-hierarchical data (unchanged)
+      const barData = formatForBarChart(result.data);
+      const lineData = formatForLineChart(result.data);
+      const areaData = formatForAreaChart(result.data);
+      const donutData = formatForDonutChart(result.data);
+      const heatmapData = formatForHeatmapChart(result.data);
+      const wordCloudData = formatForWordCloud(result.data);
+      
+      // For hierarchical charts from non-hierarchical data, create simple structure
+      const simpleHierarchy = {
+        name: result.title || "Data Hierarchy",
+        children: result.data.map(item => ({
+          name: item.name || "Unnamed",
+          value: item.value || 0
+        }))
+      };
+      
+      // Store all the data for each chart type
+      localStorage.setItem('Bar.json', JSON.stringify({
+        data: barData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('Line.json', JSON.stringify({
+        data: lineData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('Area.json', JSON.stringify({
+        data: areaData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('Donut.json', JSON.stringify({
+        data: donutData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('Heatmap.json', JSON.stringify({
+        data: heatmapData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('WordCloud.json', JSON.stringify({
+        data: wordCloudData,
+        title: result.title,
+        source: result.source
+      }));
+      
+      // Store hierarchical data
+      localStorage.setItem('TreeMap.json', JSON.stringify({
+        data: formatForTreeMap(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+
+      localStorage.setItem('TreeDiagram.json', JSON.stringify({
+        data: formatForTreeDiagram(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('SunBurst.json', JSON.stringify({
+        data: formatForSunburst(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('CirclePacking.json', JSON.stringify({
+        data: formatForCirclePacking(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      // Also set the network-based charts
+      localStorage.setItem('DAG.json', JSON.stringify({
+        data: formatForDAG(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('NetworkGraph.json', JSON.stringify({
+        data: formatForNetworkGraph(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('ConnectionMap.json', JSON.stringify({
+        data: formatForConnectionMap(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('ChordDiagram.json', JSON.stringify({
+        data: formatForChordDiagram(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('MosaicPlot.json', JSON.stringify({
+        data: formatForMosaicPlot(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      // Additional charts
+      localStorage.setItem('SmallMultiples.json', JSON.stringify({
+        data: formatForSmallMultiples(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('StackedArea.json', JSON.stringify({
+        data: formatForStackedArea(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('VoronoiMap.json', JSON.stringify({
+        data: formatForVoronoiMap(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+      
+      localStorage.setItem('PolarArea.json', JSON.stringify({
+        data: formatForPolarArea(simpleHierarchy),
+        title: result.title,
+        source: result.source
+      }));
+    }
     
     // Set status to valid
     localStorage.setItem('chartData_status', JSON.stringify({
@@ -228,18 +463,963 @@ function formatForHeatmapChart(data) {
  * Format data specifically for word cloud
  */
 function formatForWordCloud(data) {
-  // Word clouds typically use text size proportional to value
-  const values = data.map(item => item.value || 0);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  // If data is hierarchical, flatten it first
+  const flatData = data.children ? flattenHierarchy(data) : data;
   
-  return data.map(item => ({
-    text: item.name || 'Unnamed',
-    value: item.value || 0,
-    size: 10 + ((item.value - min) / (max - min || 1)) * 40, // Size between 10 and 50
-    ...(item.isPercentage && { isPercentage: true }),
-    ...(item.currency && { currency: item.currency })
-  }));
+  if (Array.isArray(flatData)) {
+    // Calculate total value for percentage calculation
+    const totalValue = flatData.reduce((sum, item) => sum + (item.value || 0), 0);
+    
+    // Format data for word cloud
+    return flatData.map(item => ({
+      text: item.name || 'Unnamed',
+      value: item.value || 1,
+      percentage: totalValue > 0 ? ((item.value || 0) / totalValue * 100).toFixed(1) : 0,
+      // Add color based on value
+      color: `hsl(${(item.value || 0) * 10 % 360}, 70%, 50%)`
+    }));
+  }
+  
+  // Fallback to sample data
+  return [
+    { text: "Sample", value: 100, percentage: 25, color: "hsl(0, 70%, 50%)" },
+    { text: "Data", value: 80, percentage: 20, color: "hsl(120, 70%, 50%)" },
+    { text: "Visualization", value: 60, percentage: 15, color: "hsl(240, 70%, 50%)" },
+    { text: "Chart", value: 40, percentage: 10, color: "hsl(60, 70%, 50%)" },
+    { text: "Example", value: 20, percentage: 5, color: "hsl(300, 70%, 50%)" }
+  ];
+}
+
+function formatForChordDiagram(data) {
+  // If data is hierarchical, flatten it first
+  const flatData = data.children ? flattenHierarchy(data) : data;
+  
+  // We need at least 2 items for a chord diagram
+  if (!Array.isArray(flatData) || flatData.length < 2) {
+    return {
+      names: ['A', 'B', 'C', 'D'],
+      matrix: [
+        [0, 10, 5, 15],
+        [10, 0, 20, 5],
+        [5, 20, 0, 10],
+        [15, 5, 10, 0]
+      ]
+    };
+  }
+  
+  // Get top items by value for better visualization
+  const topItems = [...flatData]
+    .sort((a, b) => b.value - a.value)
+    .slice(0, Math.min(10, flatData.length));
+  
+  // Extract names
+  const names = topItems.map(item => item.name);
+  
+  // Create a matrix of relationships
+  const matrix = [];
+  const totalValue = topItems.reduce((sum, item) => sum + (item.value || 0), 0);
+  
+  for (let i = 0; i < names.length; i++) {
+    const row = [];
+    for (let j = 0; j < names.length; j++) {
+      if (i === j) {
+        // No relationship with self
+        row.push(0);
+      } else {
+        // Calculate relationship value based on the two items
+        const sourceValue = topItems[i].value || 0;
+        const targetValue = topItems[j].value || 0;
+        
+        // Generate a value using a combination of the two item values
+        // Ensure some variability for visual interest
+        const strength = Math.max(5, Math.min(30, 
+          Math.sqrt(sourceValue * targetValue) / (totalValue / names.length) * (0.5 + Math.random())
+        ));
+        
+        row.push(Math.round(strength));
+      }
+    }
+    matrix.push(row);
+  }
+  
+  return { 
+    names, 
+    matrix,
+    // Add metadata for better visualization
+    metadata: {
+      totalValue,
+      maxValue: Math.max(...matrix.flat()),
+      minValue: Math.min(...matrix.flat().filter(v => v > 0))
+    }
+  };
+}
+
+function formatForConnectionMap(data) {
+  // Connection Maps are similar to Network Graphs but with geographic positions
+  // For simplicity, we'll use the same basic structure with added positions
+  const networkData = formatForNetworkGraph(data);
+  
+  // Add geographic coordinates
+  const nodesWithPositions = networkData.nodes.map((node, index) => {
+    // Generate positions in a circular layout for demonstration
+    const angle = (index / networkData.nodes.length) * 2 * Math.PI;
+    const radius = 200 + (node.value / 10);
+    
+    return {
+      ...node,
+      x: 400 + radius * Math.cos(angle),
+      y: 300 + radius * Math.sin(angle)
+    };
+  });
+  
+  return {
+    nodes: nodesWithPositions,
+    links: networkData.links
+  };
+}
+
+function formatForTreeDiagram(data) {
+  // If data already has the correct hierarchical structure, use it directly
+  if (data && typeof data === 'object' && data.name && Array.isArray(data.children)) {
+    // Ensure all nodes have proper values
+    ensureTreeDiagramValues(data);
+    return data;
+  }
+  
+  // If data is an array, create a root node with the array as children
+  if (Array.isArray(data)) {
+    return {
+      name: "Root",
+      children: data.map(item => ({
+        name: item.name || "Unnamed",
+        value: item.value || 1,
+        ...(item.children && { children: item.children })
+      }))
+    };
+  }
+  
+  // If data is an object but not in the right format, transform it
+  if (data && typeof data === 'object') {
+    const children = [];
+    
+    // Extract properties as children
+    for (const [key, value] of Object.entries(data)) {
+      if (key !== 'name' && key !== 'children') {
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          // Recursively transform nested objects
+          children.push(formatForTreeDiagram({
+            name: key,
+            ...value
+          }));
+        } else {
+          children.push({
+            name: key,
+            value: typeof value === 'number' ? value : 1
+          });
+        }
+      }
+    }
+    
+    return {
+      name: data.name || "Root",
+      children: children.length > 0 ? children : [{ name: "No Data", value: 1 }]
+    };
+  }
+  
+  // Fallback for empty or invalid data
+  return {
+    name: "Tree Diagram",
+    children: [
+      { name: "Sample A", value: 400 },
+      { name: "Sample B", value: 300, 
+        children: [
+          { name: "B1", value: 150 },
+          { name: "B2", value: 150 }
+        ]
+      },
+      { name: "Sample C", value: 200 },
+      { name: "Sample D", value: 100 }
+    ]
+  };
+}
+
+/**
+ * Ensure all nodes in the hierarchy have proper value properties
+ * @param {Object} node - The node to process
+ */
+function ensureTreeDiagramValues(node) {
+  if (!node) return;
+  
+  // Assign default value if not present
+  if (node.value === undefined || node.value === null) {
+    // Root nodes typically don't need values for tree diagrams
+    if (!node.children || node.children.length === 0) {
+      node.value = 1;
+    }
+  }
+  
+  // Process children
+  if (node.children && node.children.length > 0) {
+    node.children.forEach(child => ensureTreeDiagramValues(child));
+  }
+}
+
+function formatForCirclePacking(data) {
+  // If data is already hierarchical, ensure it has proper values
+  if (data.children) {
+    // Ensure all nodes have proper values
+    ensureNodeValues(data);
+    
+    // Add metadata for better visualization
+    const metadata = {
+      totalValue: calculateTotalValue(data),
+      maxDepth: calculateMaxDepth(data),
+      nodeCount: countNodes(data)
+    };
+    
+    return {
+      data: data,
+      metadata
+    };
+  }
+  
+  // For non-hierarchical data, create a simple hierarchy
+  if (Array.isArray(data)) {
+    // Sort data by value
+    const sortedData = [...data].sort((a, b) => b.value - a.value);
+    
+    // Create a simple hierarchy with one level
+    const hierarchy = {
+      name: "Data",
+      children: sortedData.map(item => ({
+        name: item.name || "Unnamed",
+        value: item.value || 1
+      }))
+    };
+    
+    return {
+      data: hierarchy,
+      metadata: {
+        totalValue: sortedData.reduce((sum, item) => sum + (item.value || 0), 0),
+        maxDepth: 1,
+        nodeCount: sortedData.length
+      }
+    };
+  }
+  
+  // Fallback to sample data
+  return {
+    data: {
+      name: "Sample Data",
+      children: [
+        {
+          name: "Group A",
+          children: [
+            { name: "Item A1", value: 40 },
+            { name: "Item A2", value: 30 }
+          ]
+        },
+        {
+          name: "Group B",
+          children: [
+            { name: "Item B1", value: 20 },
+            { name: "Item B2", value: 10 }
+          ]
+        }
+      ]
+    },
+    metadata: {
+      totalValue: 100,
+      maxDepth: 2,
+      nodeCount: 6
+    }
+  };
+}
+
+function formatForTreeMap(data) {
+  // If data is already hierarchical, ensure it has proper values
+  if (data.children) {
+    // Ensure all nodes have proper values
+    ensureNodeValues(data);
+    
+    // Add metadata for better visualization
+    const metadata = {
+      totalValue: calculateTotalValue(data),
+      maxDepth: calculateMaxDepth(data),
+      nodeCount: countNodes(data)
+    };
+    
+    return {
+      data: data,
+      metadata
+    };
+  }
+  
+  // For non-hierarchical data, create a simple hierarchy
+  if (Array.isArray(data)) {
+    // Sort data by value
+    const sortedData = [...data].sort((a, b) => b.value - a.value);
+    
+    // Create a simple hierarchy with one level
+    const hierarchy = {
+      name: "Data",
+      children: sortedData.map(item => ({
+        name: item.name || "Unnamed",
+        value: item.value || 1
+      }))
+    };
+    
+    return {
+      data: hierarchy,
+      metadata: {
+        totalValue: sortedData.reduce((sum, item) => sum + (item.value || 0), 0),
+        maxDepth: 1,
+        nodeCount: sortedData.length
+      }
+    };
+  }
+  
+  // Fallback to sample data
+  return {
+    data: {
+      name: "Sample Data",
+      children: [
+        {
+          name: "Group A",
+          children: [
+            { name: "Item A1", value: 40 },
+            { name: "Item A2", value: 30 }
+          ]
+        },
+        {
+          name: "Group B",
+          children: [
+            { name: "Item B1", value: 20 },
+            { name: "Item B2", value: 10 }
+          ]
+        }
+      ]
+    },
+    metadata: {
+      totalValue: 100,
+      maxDepth: 2,
+      nodeCount: 6
+    }
+  };
+}
+
+// Helper functions for hierarchical data processing
+function calculateTotalValue(node) {
+  if (!node) return 0;
+  let total = node.value || 0;
+  if (node.children) {
+    total += node.children.reduce((sum, child) => sum + calculateTotalValue(child), 0);
+  }
+  return total;
+}
+
+function calculateMaxDepth(node, currentDepth = 0) {
+  if (!node) return currentDepth;
+  if (!node.children || node.children.length === 0) return currentDepth;
+  return Math.max(...node.children.map(child => calculateMaxDepth(child, currentDepth + 1)));
+}
+
+function countNodes(node) {
+  if (!node) return 0;
+  let count = 1;
+  if (node.children) {
+    count += node.children.reduce((sum, child) => sum + countNodes(child), 0);
+  }
+  return count;
+}
+
+function formatForSunburst(data, query, fallbackJson) {
+  const normalizedQuery = (typeof query === 'string' ? query : query?.response || '').toLowerCase();
+
+  // Use fallback data based on query
+  if (!data || Object.keys(data).length === 0) {
+    if (fallbackJson && fallbackJson.fallbacks) {
+      if (normalizedQuery.includes('dramatic structure') || normalizedQuery.includes('acts') || normalizedQuery.includes('beats')) {
+        const structureFallback = fallbackJson.fallbacks.find(f => f.id === 'structure');
+        if (structureFallback) {
+          ensureNodeValues(structureFallback.data);
+          return structureFallback.data;
+        }
+      } else if (normalizedQuery.includes('directors') && normalizedQuery.includes('award-winning')) {
+        const rolesFallback = fallbackJson.fallbacks.find(f => f.id === 'roles');
+        if (rolesFallback) {
+          ensureNodeValues(rolesFallback.data);
+          return rolesFallback.data;
+        }
+      }
+    }
+
+    // Default fallback if nothing matches
+    return {
+      name: "No Matching Fallback",
+      children: [{ name: "Try a different query", value: 1 }]
+    };
+  }
+
+  // Use directly if structured correctly
+  if (data && typeof data === 'object' && data.name && Array.isArray(data.children)) {
+    ensureNodeValues(data);
+    return data;
+  }
+
+  // Wrap array in root
+  if (Array.isArray(data)) {
+    return {
+      name: "Root",
+      children: data.map(item => ({
+        name: item.name || "Unnamed",
+        value: item.value || 1,
+        ...(item.children && { children: item.children })
+      }))
+    };
+  }
+
+  // Convert object to hierarchy
+  if (data && typeof data === 'object') {
+    const children = [];
+
+    for (const [key, value] of Object.entries(data)) {
+      if (key !== 'name' && key !== 'children') {
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          children.push(formatForSunburst({
+            name: key,
+            ...value
+          }, '', fallbackJson));
+        } else {
+          children.push({
+            name: key,
+            value: typeof value === 'number' ? value : 1
+          });
+        }
+      }
+    }
+
+    return {
+      name: data.name || "Root",
+      children: children.length > 0 ? children : [{ name: "No Data", value: 1 }]
+    };
+  }
+
+  // Ultimate fallback
+  return {
+    name: "Sunburst Data",
+    children: [{ name: "Unknown Format", value: 1 }]
+  };
+}
+
+/**
+ * Ensure all nodes in the hierarchy have proper value properties
+ * @param {Object} node - The node to process
+ * @param {number} depth - Current depth in the hierarchy
+ */
+function ensureNodeValues(node, depth = 0) {
+  if (!node) return;
+  
+  // Leaf nodes must have a value
+  if (!node.children || node.children.length === 0) {
+    node.value = node.value || 100 - (depth * 20) || 1;
+  }
+  
+  // Process children
+  if (node.children && node.children.length > 0) {
+    node.children.forEach(child => ensureNodeValues(child, depth + 1));
+    
+    // If this node doesn't have an explicit value but has children,
+    // let the d3.hierarchy sum() function calculate it
+  }
+}
+
+function formatForDAG(data) {
+  // If data is already hierarchical, convert it to DAG format
+  if (data.children) {
+    const nodes = [];
+    const links = [];
+    const nodeMap = new Map(); // Track nodes by ID
+    
+    function traverseHierarchy(node, parentId = null, level = 0) {
+      if (!node || !node.name) return;
+      
+      // Create clean ID from name
+      const id = node.name.replace(/[^\w\s]/gi, '').trim().toLowerCase().replace(/\s+/g, '_');
+      if (!id) return; // Skip nodes with empty IDs
+      
+      // Add node if it doesn't exist
+      if (!nodeMap.has(id)) {
+        const newNode = {
+          id: id,
+          name: node.name,
+          value: node.value || Math.max(5, 20 - (level * 5)), // Value decreases with depth
+          level: level
+        };
+        nodes.push(newNode);
+        nodeMap.set(id, newNode);
+      }
+      
+      // Add link from parent
+      if (parentId) {
+        const linkId = `${parentId}-${id}`;
+        if (!links.some(l => l.id === linkId)) {
+          links.push({
+            id: linkId,
+            source: parentId,
+            target: id,
+            value: 1
+          });
+        }
+      }
+      
+      // Process children
+      if (node.children && Array.isArray(node.children)) {
+        node.children.forEach(child => traverseHierarchy(child, id, level + 1));
+      }
+    }
+    
+    traverseHierarchy(data);
+    
+    // Ensure all nodes have at least one connection
+    if (nodes.length > 0 && links.length === 0) {
+      // Create a simple chain if no links were created
+      for (let i = 0; i < nodes.length - 1; i++) {
+        links.push({
+          id: `${nodes[i].id}-${nodes[i + 1].id}`,
+          source: nodes[i].id,
+          target: nodes[i + 1].id,
+          value: 1
+        });
+      }
+    }
+    
+    return { nodes, links };
+  }
+  
+  // For non-hierarchical data, create a simple DAG
+  if (Array.isArray(data)) {
+    const nodes = data.map((item, index) => ({
+      id: `node_${index}`,
+      name: item.name || `Item ${index + 1}`,
+      value: item.value || 10,
+      level: 0
+    }));
+    
+    const links = [];
+    // Create a simple chain
+    for (let i = 0; i < nodes.length - 1; i++) {
+      links.push({
+        id: `link_${i}`,
+        source: nodes[i].id,
+        target: nodes[i + 1].id,
+        value: 1
+      });
+    }
+    
+    return { nodes, links };
+  }
+  
+  // Fallback to sample data
+  return {
+    nodes: [
+      { id: 'root', name: 'Root', value: 20, level: 0 },
+      { id: 'a', name: 'Node A', value: 15, level: 1 },
+      { id: 'b', name: 'Node B', value: 15, level: 1 },
+      { id: 'c', name: 'Node C', value: 10, level: 2 },
+      { id: 'd', name: 'Node D', value: 10, level: 2 }
+    ],
+    links: [
+      { id: 'root-a', source: 'root', target: 'a', value: 1 },
+      { id: 'root-b', source: 'root', target: 'b', value: 1 },
+      { id: 'a-c', source: 'a', target: 'c', value: 1 },
+      { id: 'b-d', source: 'b', target: 'd', value: 1 }
+    ]
+  };
+}
+
+
+function formatForNetworkGraph(data) {
+  // For hierarchical data, create a network based on parent-child relationships
+  if (data.children) {
+    const nodes = [];
+    const links = [];
+    
+    function traverseHierarchy(node, parentId = null, level = 0) {
+      if (!node || !node.name) return;
+      
+      // Create clean ID from name
+      const id = node.name.replace(/[^\w\s]/gi, '').trim();
+      if (!id) return; // Skip nodes with empty IDs
+      
+      // Check if node already exists
+      if (!nodes.some(n => n.id === id)) {
+        nodes.push({
+          id: id,
+          name: node.name,
+          value: node.value || Math.max(5, 20 - (level * 5)), // Value decreases with depth
+          group: level + 1 // Group by hierarchy level
+        });
+      }
+      
+      // Add link from parent
+      if (parentId) {
+        links.push({
+          source: parentId,
+          target: id,
+          value: 1
+        });
+      }
+      
+      // Process children
+      if (node.children && Array.isArray(node.children)) {
+        node.children.forEach(child => traverseHierarchy(child, id, level + 1));
+      }
+    }
+    
+    traverseHierarchy(data);
+    
+    return { nodes, links };
+  }
+  
+  // For flat data, create a network based on value relationships
+  if (Array.isArray(data)) {
+    const nodes = data.map((item, index) => ({
+      id: item.name ? item.name.replace(/[^\w\s]/gi, '').trim() : `node_${index}`,
+      name: item.name || `Item ${index}`,
+      value: item.value || 1,
+      group: Math.floor(index / 3) + 1 // Simple grouping
+    }));
+    
+    const links = [];
+    
+    // Create some connections between nodes
+    for (let i = 0; i < nodes.length; i++) {
+      // Connect to next node
+      if (i < nodes.length - 1) {
+        links.push({
+          source: nodes[i].id,
+          target: nodes[i + 1].id,
+          value: 1
+        });
+      }
+      
+      // Add some extra connections for more interesting network
+      if (i % 3 === 0 && i + 2 < nodes.length) {
+        links.push({
+          source: nodes[i].id,
+          target: nodes[i + 2].id,
+          value: 0.5
+        });
+      }
+    }
+    
+    return { nodes, links };
+  }
+  
+  // Fallback to sample data
+  return {
+    nodes: [
+      { id: "A", name: "Node A", value: 10, group: 1 },
+      { id: "B", name: "Node B", value: 8, group: 1 },
+      { id: "C", name: "Node C", value: 6, group: 2 },
+      { id: "D", name: "Node D", value: 4, group: 2 },
+      { id: "E", name: "Node E", value: 2, group: 3 }
+    ],
+    links: [
+      { source: "A", target: "B", value: 1 },
+      { source: "A", target: "C", value: 1 },
+      { source: "B", target: "D", value: 1 },
+      { source: "C", target: "D", value: 1 },
+      { source: "D", target: "E", value: 1 }
+    ]
+  };
+}
+
+function formatForMosaicPlot(data) {
+  // Mosaic plots need categorical data with at least two dimensions
+  
+  // If hierarchical, use the first two levels
+  if (data.children) {
+    const result = {
+      data: [],
+      categories: [],
+      subcategories: []
+    };
+    
+    // Extract unique categories (first level)
+    data.children.forEach(child => {
+      if (child.name) {
+        if (!result.categories.includes(child.name)) {
+          result.categories.push(child.name);
+        }
+        
+        // Extract subcategories (second level)
+        if (child.children && Array.isArray(child.children)) {
+          child.children.forEach(subchild => {
+            if (subchild.name) {
+              if (!result.subcategories.includes(subchild.name)) {
+                result.subcategories.push(subchild.name);
+              }
+              
+              // Add data point
+              result.data.push({
+                category: child.name,
+                subcategory: subchild.name,
+                value: subchild.value || 1
+              });
+            }
+          });
+        }
+      }
+    });
+    
+    return result;
+  }
+  
+  // For flat data, create categories based on value ranges
+  if (Array.isArray(data)) {
+    // Determine value ranges for categories
+    const values = data.map(item => item.value || 0);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const range = maxValue - minValue;
+    
+    // Create category boundaries
+    const lowThreshold = minValue + range / 3;
+    const mediumThreshold = minValue + 2 * range / 3;
+    
+    // Create result
+    const result = {
+      data: [],
+      categories: ["Low", "Medium", "High"],
+      subcategories: []
+    };
+    
+    // Extract subcategories from the first letters of names
+    const uniqueFirstLetters = [...new Set(
+      data.map(item => item.name.charAt(0).toUpperCase())
+    )].sort();
+    
+    result.subcategories = uniqueFirstLetters;
+    
+    // Create data points
+    data.forEach(item => {
+      let category;
+      if (item.value <= lowThreshold) {
+        category = "Low";
+      } else if (item.value <= mediumThreshold) {
+        category = "Medium";
+      } else {
+        category = "High";
+      }
+      
+      const subcategory = item.name.charAt(0).toUpperCase();
+      
+      result.data.push({
+        category,
+        subcategory,
+        value: item.value || 1,
+        name: item.name
+      });
+    });
+    
+    return result;
+  }
+  
+  // Fallback to sample data
+  return {
+    data: [
+      { category: "A", subcategory: "X", value: 15 },
+      { category: "A", subcategory: "Y", value: 10 },
+      { category: "B", subcategory: "X", value: 12 },
+      { category: "B", subcategory: "Y", value: 5 },
+      { category: "C", subcategory: "X", value: 8 },
+      { category: "C", subcategory: "Y", value: 20 }
+    ],
+    categories: ["A", "B", "C"],
+    subcategories: ["X", "Y"]
+  };
+}
+
+function formatForSmallMultiples(data) {
+  // Small multiples typically show the same chart type with different data subsets
+  
+  // If hierarchical, use first level as categories
+  if (data.children) {
+    return data.children.map(child => ({
+      category: child.name,
+      data: child.children ? 
+        child.children.map(grandchild => ({
+          name: grandchild.name,
+          value: grandchild.value || 1
+        })) : 
+        [{ name: child.name, value: child.value || 1 }]
+    }));
+  }
+  
+  // For flat data, group by first letter of name
+  if (Array.isArray(data)) {
+    // Group data by first letter of name
+    const groupedData = {};
+    
+    data.forEach(item => {
+      const firstLetter = item.name.charAt(0).toUpperCase();
+      if (!groupedData[firstLetter]) {
+        groupedData[firstLetter] = [];
+      }
+      groupedData[firstLetter].push({
+        name: item.name,
+        value: item.value || 1
+      });
+    });
+    
+    // Convert grouped data to array
+    return Object.entries(groupedData).map(([letter, items]) => ({
+      category: `Group ${letter}`,
+      data: items
+    }));
+  }
+  
+  // Fallback to sample data
+  return [
+    {
+      category: "Group A",
+      data: [
+        { name: "A1", value: 10 },
+        { name: "A2", value: 15 },
+        { name: "A3", value: 8 }
+      ]
+    },
+    {
+      category: "Group B",
+      data: [
+        { name: "B1", value: 12 },
+        { name: "B2", value: 5 },
+        { name: "B3", value: 9 }
+      ]
+    },
+    {
+      category: "Group C",
+      data: [
+        { name: "C1", value: 7 },
+        { name: "C2", value: 14 },
+        { name: "C3", value: 11 }
+      ]
+    }
+  ];
+}
+
+function formatForStackedArea(data) {
+  // Stacked area charts need time series data with multiple categories
+  const timePoints = 5; // Number of time points to generate
+  
+  // If hierarchical, use first level children as categories
+  if (data.children) {
+    const categories = data.children.map(child => child.name).slice(0, 5);
+    const result = [];
+    
+    // Generate time points
+    for (let t = 0; t < timePoints; t++) {
+      const timePoint = {
+        name: `T${t + 1}`
+      };
+      
+      // Add values for each category
+      categories.forEach((category, i) => {
+        const baseValue = data.children[i].value || 50;
+        // Generate a trending value (increasing or decreasing over time)
+        const trendFactor = 1 + (t * (Math.random() > 0.5 ? 0.1 : -0.05));
+        timePoint[category] = Math.round(baseValue * trendFactor);
+      });
+      
+      result.push(timePoint);
+    }
+    
+    return {
+      data: result,
+      categories
+    };
+  }
+  
+  // For flat data, use top items as categories
+  if (Array.isArray(data)) {
+    // Get top categories by value
+    const topCategories = [...data]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
+      .map(item => item.name);
+    
+    const result = [];
+    
+    // Generate time points
+    for (let t = 0; t < timePoints; t++) {
+      const timePoint = {
+        name: `T${t + 1}`
+      };
+      
+      // Add values for each category
+      topCategories.forEach((category, i) => {
+        const baseValue = data.find(item => item.name === category).value || 50;
+        // Generate a trending value
+        const trendFactor = 1 + (t * (Math.random() > 0.5 ? 0.1 : -0.05));
+        timePoint[category] = Math.round(baseValue * trendFactor);
+      });
+      
+      result.push(timePoint);
+    }
+    
+    return {
+      data: result,
+      categories: topCategories
+    };
+  }
+  
+  // Fallback to sample data
+  return {
+    data: [
+      { name: "T1", "Category A": 20, "Category B": 30, "Category C": 10 },
+      { name: "T2", "Category A": 25, "Category B": 25, "Category C": 15 },
+      { name: "T3", "Category A": 30, "Category B": 20, "Category C": 20 },
+      { name: "T4", "Category A": 35, "Category B": 15, "Category C": 25 },
+      { name: "T5", "Category A": 40, "Category B": 10, "Category C": 30 }
+    ],
+    categories: ["Category A", "Category B", "Category C"]
+  };
+}
+
+function formatForVoronoiMap(data) {
+  // Voronoi maps need points with coordinates
+  
+  // If hierarchical, flatten it first
+  const flatData = data.children ? flattenHierarchy(data) : data;
+  
+  if (Array.isArray(flatData)) {
+    // Create points with coordinates
+    return flatData.map((item, index) => {
+      // Generate positions using a deterministic approach
+      // This ensures consistent positions based on index and value
+      const angle = (index / flatData.length) * 2 * Math.PI;
+      // Value affects distance from center
+      const radius = 200 + (Math.sqrt(item.value || 1) * 10);
+      
+      return {
+        name: item.name,
+        value: item.value || 1,
+        x: 400 + radius * Math.cos(angle),
+        y: 300 + radius * Math.sin(angle)
+      };
+    });
+  }
+  
+  // Fallback to sample data
+  return [
+    { name: "Point A", value: 30, x: 200, y: 200 },
+    { name: "Point B", value: 25, x: 300, y: 400 },
+    { name: "Point C", value: 20, x: 400, y: 150 },
+    { name: "Point D", value: 15, x: 500, y: 350 },
+    { name: "Point E", value: 10, x: 600, y: 250 }
+  ];
 }
 
 /**
@@ -296,11 +1476,507 @@ function processSavedChatData(chatString) {
 }
 
 /**
+ * Helper function to detect hierarchical data structures in text
+ */
+function containsHierarchicalData(text) {
+  // Convert text to lowercase for case-insensitive matching
+  const lowerText = text.toLowerCase();
+  
+  // Hierarchy keywords
+  const hierarchy_keywords = [
+    "structure", "hierarchy", "nested", "parent", "child", "tree", "branch", "root", 
+    "descendant", "ancestor", "organization", "breakdown", "composition", "contains",
+    "hierarchical", "level", "tier", "layer", "subordinate", "superordinate", "category",
+    "subcategory", "classification", "taxonomy", "class", "subclass", "group", "subgroup",
+    "department", "division", "section", "subsection", "part", "subpart", "component",
+    "subcomponent", "element", "subelement", "unit", "subunit", "module", "submodule"
+  ];
+  
+  // Check if text contains any of the hierarchy keywords
+  const hasHierarchyKeyword = hierarchy_keywords.some(keyword => lowerText.includes(keyword));
+  
+  // Check for common hierarchical patterns
+  const hasHierarchicalPatterns = (
+    // Look for nested structures with asterisks
+    (text.includes('**') && text.includes(':')) || 
+    // Look for bullet points with hierarchy indicators (*, +, -, etc.)
+    /^\s*[\*\+\-]\s+/m.test(text) ||
+    // Look for numbered lists
+    /^\s*\d+\.\s+/m.test(text) ||
+    // Look for indentation patterns
+    /^\s{2,}[^\s]/m.test(text) ||
+    // Look for common hierarchical separators
+    /[:\-]\s*\n\s*[\*\+\-]/m.test(text) ||
+    // Look for parent-child relationships
+    /(?:parent|child|children|sub|subsidiary|division|department)/i.test(text)
+  );
+  
+  // Check for data that looks like a hierarchy
+  const hasHierarchicalStructure = (
+    // Check for repeated patterns that suggest hierarchy
+    /(?:^|\n)(?:\s*[\*\+\-]|\s*\d+\.|\s*[A-Z]\.|\s*[a-z]\.|\s*[IVX]+\.|\s*[ivx]+\.)/m.test(text) ||
+    // Check for nested bullet points
+    /^\s*[\*\+\-]\s+.*\n\s{2,}[\*\+\-]/m.test(text) ||
+    // Check for numbered sub-items
+    /^\s*\d+\.\s+.*\n\s{2,}\d+\./m.test(text)
+  );
+  
+  return hasHierarchyKeyword || hasHierarchicalPatterns || hasHierarchicalStructure;
+}
+
+function extractEnhancedHierarchicalData(text) {
+  const result = {
+    name: detectTitleFromText(text) || "Hierarchical Data",
+    children: []
+  };
+  
+  // Split text by lines for processing
+  const lines = text.split('\n');
+  
+  // State tracking
+  let currentSections = []; // Track section hierarchy
+  let currentSection = null;
+  let previousLevel = -1;
+  
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue; // Skip empty lines
+    
+    // Detect hierarchical elements and their levels
+    
+    // Major section headers (often bold with **)
+    if (line.match(/^\*\*([^*:]+)(?:\*\*|:)/)) {
+      const sectionMatch = line.match(/^\*\*([^*:]+)(?:\*\*|:)/);
+      const sectionName = sectionMatch[1].trim();
+      
+      const newSection = {
+        name: sectionName,
+        value: 100,
+        children: []
+      };
+      
+      // Reset to top level
+      currentSections = [newSection];
+      currentSection = newSection;
+      previousLevel = 0;
+      
+      // Add to root
+      result.children.push(newSection);
+      continue;
+    }
+    
+    // Numbered items (1., 2., etc)
+    if (line.match(/^\*?\s*\d+\.\s*\*?\*([^*:]+)(?:\*\*|:)/)) {
+      const itemMatch = line.match(/^\*?\s*\d+\.\s*\*?\*([^*:]+)(?:\*\*|:)/);
+      const itemName = itemMatch[1].trim();
+      
+      // This is typically a second level item
+      const newItem = {
+        name: itemName,
+        value: 70,
+        children: []
+      };
+      
+      // Check if we need to adjust the section hierarchy
+      if (previousLevel < 1) {
+        // Add to current top-level section
+        if (currentSections.length > 0) {
+          currentSections[0].children.push(newItem);
+        } else {
+          // No parent section yet, create one
+          const parentSection = {
+            name: "Main Category",
+            value: 100,
+            children: [newItem]
+          };
+          result.children.push(parentSection);
+          currentSections = [parentSection];
+        }
+      } else if (previousLevel === 1) {
+        // Same level, add to same parent
+        currentSections[0].children.push(newItem);
+      } else {
+        // Moving up a level, adjust hierarchy
+        while (currentSections.length > 1) {
+          currentSections.pop();
+        }
+        currentSections[0].children.push(newItem);
+      }
+      
+      // Update current section
+      currentSections[1] = newItem;
+      currentSection = newItem;
+      previousLevel = 1;
+      continue;
+    }
+    
+    // Bullet points (*, -, +) that contain examples or further details
+    if (line.match(/^\s*[\*\-\+]\s+(.+)/)) {
+      const bulletMatch = line.match(/^\s*[\*\-\+]\s+(.+)/);
+      let itemText = bulletMatch[1].trim();
+      
+      // Extract example names if present
+      const examples = [];
+      
+      // Match example patterns like "Examples: Name1, Name2"
+      if (itemText.includes("Examples:")) {
+        const exampleMatch = itemText.match(/Examples:\s*(.*)/);
+        if (exampleMatch) {
+          const exampleList = exampleMatch[1].split(',').map(ex => ex.trim());
+          itemText = itemText.replace(/Examples:\s*.*/, "Examples:");
+          
+          exampleList.forEach(ex => {
+            // Extract name and film if available (e.g., "Director Name (Film, Year)")
+            const nameMatch = ex.match(/(.*?)\s*(?:\((.*?)\))?$/);
+            if (nameMatch) {
+              examples.push({
+                name: nameMatch[1].trim(),
+                value: 30,
+                ...(nameMatch[2] && { info: nameMatch[2].trim() })
+              });
+            }
+          });
+        }
+      }
+      
+      // This is a child of the current section
+      const newItem = {
+        name: itemText,
+        value: 50,
+        ...(examples.length > 0 && { children: examples })
+      };
+      
+      // Add to current section
+      if (currentSection) {
+        if (!currentSection.children) {
+          currentSection.children = [];
+        }
+        currentSection.children.push(newItem);
+      } else {
+        // No parent section yet, add to root
+        result.children.push(newItem);
+      }
+      
+      previousLevel = 2;
+      continue;
+    }
+    
+    // Sequences with plus signs (+)
+    if (line.match(/^\s*\+\s+(.+)/)) {
+      const plusMatch = line.match(/^\s*\+\s+(.+)/);
+      const itemName = plusMatch[1].trim();
+      
+      // This is typically a detail item
+      const newItem = {
+        name: itemName,
+        value: 30
+      };
+      
+      // Add to current section
+      if (currentSection) {
+        if (!currentSection.children) {
+          currentSection.children = [];
+        }
+        currentSection.children.push(newItem);
+      } else {
+        // No parent section yet, add to root
+        result.children.push(newItem);
+      }
+      
+      previousLevel = 3;
+    }
+  }
+  
+  // Special processing for film studios structure
+  if (text.toLowerCase().includes("studios") && text.toLowerCase().includes("subsidiaries")) {
+    return processStudioStructure(text);
+  }
+  
+  // Special processing for dramatic structure
+  if (text.toLowerCase().includes("dramatic structure") || text.toLowerCase().includes("act 1")) {
+    return processDramaticStructure(text);
+  }
+  
+  return result;
+}
+
+/**
+ * Process film studio organizational structure
+ * @param {string} text - The text response about film studios
+ * @returns {Object} The structured hierarchy of film studios
+ */
+function processStudioStructure(text) {
+  const result = {
+    name: "Hollywood Studios",
+    children: []
+  };
+  
+  // Split by lines for processing
+  const lines = text.split('\n');
+  
+  let currentStudio = null;
+  let currentCategory = null;
+  
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    // Match main studio category (Big Six, Independent majors, etc.)
+    if (line.match(/\*\*([^*]+):\*\*/)) {
+      const categoryMatch = line.match(/\*\*([^*]+):\*\*/);
+      currentCategory = {
+        name: categoryMatch[1].trim(),
+        value: 100,
+        children: []
+      };
+      result.children.push(currentCategory);
+      continue;
+    }
+    
+    // Match numbered studio entries (1. Studio Name)
+    if (line.match(/^\d+\.\s+\*\*([^*]+)\*\*/)) {
+      const studioMatch = line.match(/^\d+\.\s+\*\*([^*]+)\*\*/);
+      let studioName = studioMatch[1].trim();
+      
+      // Extract ownership info if present
+      let ownerInfo = "";
+      if (line.includes("(owned by")) {
+        const ownerMatch = line.match(/\(owned by([^)]+)\)/);
+        if (ownerMatch) {
+          ownerInfo = ownerMatch[1].trim();
+          studioName = `${studioName} (${ownerInfo})`;
+        }
+      }
+      
+      currentStudio = {
+        name: studioName,
+        value: 80,
+        children: []
+      };
+      
+      if (currentCategory) {
+        currentCategory.children.push(currentStudio);
+      } else {
+        result.children.push(currentStudio);
+      }
+      continue;
+    }
+    
+    // Match subsidiary entries (* Subsidiary Name)
+    if (line.match(/^\s*\*\s+([^*]+)/)) {
+      const subsidiaryMatch = line.match(/^\s*\*\s+([^*]+)/);
+      const subsidiaryName = subsidiaryMatch[1].trim();
+      
+      const subsidiary = {
+        name: subsidiaryName,
+        value: 50
+      };
+      
+      if (currentStudio) {
+        currentStudio.children.push(subsidiary);
+      } else if (currentCategory) {
+        currentCategory.children.push(subsidiary);
+      } else {
+        result.children.push(subsidiary);
+      }
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Process dramatic structure hierarchy
+ * @param {string} text - The text response about dramatic structure
+ * @returns {Object} The structured hierarchy of dramatic elements
+ */
+function processDramaticStructure(text) {
+  const result = {
+    name: "Dramatic Structure",
+    children: []
+  };
+  
+  // Split by lines for processing
+  const lines = text.split('\n');
+  
+  let currentAct = null;
+  let currentSequence = null;
+  
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    // Match act entries (Act 1: Setup)
+    if (line.match(/^Act\s+\d+:\s+(.+)/i)) {
+      const actMatch = line.match(/^Act\s+\d+:\s+(.+)/i);
+      const actName = `Act ${line.match(/\d+/)[0]}: ${actMatch[1].trim()}`;
+      
+      currentAct = {
+        name: actName,
+        value: 100,
+        children: []
+      };
+      
+      result.children.push(currentAct);
+      currentSequence = null;
+      continue;
+    }
+    
+    // Match sequence entries (Sequence 1: Introduction)
+    if (line.match(/^Sequence\s+\d+:/i)) {
+      const sequenceMatch = line.match(/^Sequence\s+\d+:\s+([^(]+)/i);
+      let sequenceName = `Sequence ${line.match(/\d+/)[0]}`;
+      
+      if (sequenceMatch) {
+        sequenceName += `: ${sequenceMatch[1].trim()}`;
+      }
+      
+      // Extract scene info if present
+      let sceneInfo = "";
+      if (line.includes("(Scene")) {
+        const sceneMatch = line.match(/\(Scene([^)]+)\)/);
+        if (sceneMatch) {
+          sceneInfo = sceneMatch[1].trim();
+          sequenceName += ` (${sceneInfo})`;
+        }
+      }
+      
+      currentSequence = {
+        name: sequenceName,
+        value: 70,
+        children: []
+      };
+      
+      if (currentAct) {
+        currentAct.children.push(currentSequence);
+      } else {
+        result.children.push(currentSequence);
+      }
+      continue;
+    }
+    
+    // Match elements with plus signs (+)
+    if (line.match(/^\+\s+(.+)/)) {
+      const elementMatch = line.match(/^\+\s+(.+)/);
+      const elementName = elementMatch[1].trim();
+      
+      const element = {
+        name: elementName,
+        value: 40
+      };
+      
+      if (currentSequence) {
+        currentSequence.children.push(element);
+      } else if (currentAct) {
+        currentAct.children.push(element);
+      } else {
+        result.children.push(element);
+      }
+      continue;
+    }
+    
+    // Match other structural elements like "Character Arc"
+    if (line.match(/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+/)) {
+      // Only match if it looks like a title (first letters capitalized)
+      const newSection = {
+        name: line,
+        value: 60,
+        children: []
+      };
+      
+      result.children.push(newSection);
+      
+      // The next few items might be children of this section
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim().match(/^[A-Z]/)) {
+        const childLine = lines[j].trim();
+        newSection.children.push({
+          name: childLine,
+          value: 30
+        });
+        j++;
+      }
+      
+      i = j - 1; // Skip the lines we've already processed
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Helper function to detect title from text
+ * @param {string} text - The text to detect a title from
+ * @returns {string} The detected title
+ */
+function detectTitleFromText(text) {
+  // Look for common domain identifiers
+  if (text.toLowerCase().includes("film") || text.toLowerCase().includes("cinema") || 
+      text.toLowerCase().includes("movie")) {
+    return "Film Industry Hierarchy";
+  } else if (text.toLowerCase().includes("studio") || text.toLowerCase().includes("organizational structure")) {
+    return "Hollywood Studio Structure";
+  } else if (text.toLowerCase().includes("dramatic structure") || text.toLowerCase().includes("storytelling")) {
+    return "Dramatic Structure Hierarchy";
+  }
+  
+  // Default title
+  return "Hierarchical Data";
+}
+
+/**
+ * Improved extraction of hierarchical data from text
+ * @param {string} text - The text to extract hierarchical data from
+ * @returns {Object} Object containing extracted data and metadata
+ */
+function enhancedExtractHierarchicalData(text) {
+  const hierarchy = extractEnhancedHierarchicalData(text);
+  
+  return {
+    data: hierarchy,
+    title: hierarchy.name,
+    source: 'hierarchy',
+    isHierarchical: true
+  };
+}
+
+function flattenHierarchy(node, result = [], level = 0, parentPath = '') {
+  if (!node) return result;
+  
+  // Create current path
+  const currentPath = parentPath ? `${parentPath} > ${node.name}` : node.name;
+  
+  if (node.name) {
+    // Add current node to result
+    result.push({
+      name: level === 0 ? node.name : currentPath,
+      value: node.value || (100 - (level * 20)),
+      level: level
+    });
+  }
+  
+  // Process children
+  if (node.children && node.children.length) {
+    node.children.forEach(child => {
+      flattenHierarchy(child, result, level + 1, currentPath);
+    });
+  }
+  
+  return result;
+}
+
+/**
  * Process markdown data
  */
 function processMarkdownData(markdown) {
   try {
     // Basic markdown parsing (simplified without using external library)
+    if (containsHierarchicalData(markdown)) {
+      return enhancedExtractHierarchicalData(markdown);
+    }
     // Remove bold markers
     let plainText = markdown.replace(/\*\*(.*?)\*\*/g, '$1');
     // Remove italic markers
@@ -325,7 +2001,9 @@ function processMarkdownData(markdown) {
     const responseText = data.response;
     
     // Check for various data formats in the response text
-    if (containsCurrencyData(responseText)) {
+    if (containsHierarchicalData(responseText)) {
+      return enhancedExtractHierarchicalData(responseText);
+    } else if (containsCurrencyData(responseText)) {
       return extractCurrencyData(responseText);
     } else if (containsTimeData(responseText)) {
       return extractTimeData(responseText);
@@ -342,7 +2020,9 @@ function processMarkdownData(markdown) {
    * Process direct text input
    */
   function processTextData(text) {
-    if (containsCurrencyData(text)) {
+    if (containsHierarchicalData(text)) {
+      return enhancedExtractHierarchicalData(text);
+    } else if (containsCurrencyData(text)) {
       return extractCurrencyData(text);
     } else if (containsTimeData(text)) {
       return extractTimeData(text);

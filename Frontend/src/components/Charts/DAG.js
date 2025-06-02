@@ -15,294 +15,266 @@ const DAG = ({ data, query }) => {
       setLoading(true);
       setError('');
 
-      // Try to load data from localStorage
-      const storedData = localStorage.getItem('DAG.json');
-      if (storedData) {
-        const parsedData = JSON.parse(storedData);
-        setChartData(parsedData.data);
-        setChartTitle(parsedData.title);
-        setDataSource(parsedData.source);
-        setLoading(false);
-      } else if (data) {
-        // Process data using processChartData from DataPU if directly provided
-        import('./DataPU').then(({ processChartData }) => {
-          const result = processChartData(data, query);
-          
-          // Format for DAG if needed
-          setChartData(result.data);
-          setChartTitle(result.title);
-          setDataSource(result.source);
-          setLoading(false);
-        });
-      } else {
-        // Check status
-        const statusData = localStorage.getItem('chartData_status');
-        if (statusData) {
-          const status = JSON.parse(statusData);
-          if (!status.isValid) {
-            setError(status.message || 'Invalid response - charts cannot be generated');
-          } else {
-            setError('No DAG data available. Please process data first.');
-          }
-        } else {
-          setError('No DAG data available. Please process data first.');
+      // Process the data
+      let graphData;
+      if (typeof data === 'string') {
+        // Try to parse JSON string
+        try {
+          graphData = JSON.parse(data);
+        } catch (e) {
+          // If not JSON, create a simple graph from text
+          const words = data.split(/\s+/).filter(word => word.length > 2);
+          graphData = {
+            nodes: words.map((word, i) => ({
+              id: i,
+              name: word,
+              value: 1
+            })),
+            links: words.slice(0, -1).map((word, i) => ({
+              source: i,
+              target: i + 1,
+              value: 1
+            }))
+          };
         }
-        setLoading(false);
+      } else if (Array.isArray(data)) {
+        // If array, create a simple graph
+        graphData = {
+          nodes: data.map((item, i) => ({
+            id: i,
+            name: typeof item === 'object' ? (item.name || 'Unnamed') : String(item),
+            value: typeof item === 'object' ? (item.value || 1) : 1
+          })),
+          links: data.slice(0, -1).map((_, i) => ({
+            source: i,
+            target: i + 1,
+            value: 1
+          }))
+        };
+      } else if (typeof data === 'object') {
+        // If object, use it directly or create graph
+        if (data.nodes && data.links) {
+          graphData = data;
+        } else if (data.children) {
+          // Convert hierarchy to graph
+          const nodes = [];
+          const links = [];
+          let id = 0;
+
+          function processNode(node, parentId = null) {
+            const nodeId = id++;
+            nodes.push({
+              id: nodeId,
+              name: node.name || 'Unnamed',
+              value: node.value || 1
+            });
+
+            if (parentId !== null) {
+              links.push({
+                source: parentId,
+                target: nodeId,
+                value: 1
+              });
+            }
+
+            if (node.children) {
+              node.children.forEach(child => processNode(child, nodeId));
+            }
+          }
+
+          processNode(data);
+          graphData = { nodes, links };
+        } else {
+          // Create graph from object properties
+          const nodes = [];
+          const links = [];
+          let id = 0;
+
+          Object.entries(data).forEach(([key, value]) => {
+            const nodeId = id++;
+            nodes.push({
+              id: nodeId,
+              name: key,
+              value: typeof value === 'number' ? value : 1
+            });
+
+            if (typeof value === 'object' && value !== null) {
+              Object.entries(value).forEach(([subKey, subValue]) => {
+                const targetId = id++;
+                nodes.push({
+                  id: targetId,
+                  name: subKey,
+                  value: typeof subValue === 'number' ? subValue : 1
+                });
+                links.push({
+                  source: nodeId,
+                  target: targetId,
+                  value: 1
+                });
+              });
+            }
+          });
+
+          graphData = { nodes, links };
+        }
       }
+
+      // Set title
+      setChartTitle(graphData.name || 'Directed Acyclic Graph');
+      setChartData(graphData);
     } catch (err) {
-      console.error('Error processing data for DAG:', err);
-      setError(`Processing error: ${err.message}`);
+      console.error('Error processing DAG data:', err);
+      setError('Failed to process data for visualization');
+    } finally {
       setLoading(false);
     }
-  }, [data, query]);
+  }, [data]);
 
-  // D3 rendering effect
   useEffect(() => {
-    if (!loading && !error && chartData && d3Container.current) {
-      // Clear previous visualization
-      d3.select(d3Container.current).selectAll('*').remove();
+    if (!chartData || !d3Container.current) return;
 
-      // For a DAG visualization, we need nodes and links
-      // We'll create a simple DAG structure from our data
-      // In a real application, you would have actual graph relationship data
-      
-      // Create nodes from chart data
-      const nodes = chartData.map((item, index) => ({
-        id: index,
-        name: item.name,
-        value: item.value
-      }));
-      
-      // Create directed links between nodes
-      // We'll create a simple flow where each node points to the next one
-      // with some additional cross-links for demonstration
-      const links = [];
-      
-      // Sort nodes by value (this will help create a hierarchy)
-      nodes.sort((a, b) => b.value - a.value);
-      
-      // Create sequential links (node 0 -> node 1 -> node 2, etc.)
-      for (let i = 0; i < nodes.length - 1; i++) {
-        links.push({
-          source: nodes[i].id,
-          target: nodes[i + 1].id,
-          value: 1
-        });
-      }
-      
-      // Add some cross-links to make it more interesting (but still acyclic)
-      // For n nodes, a DAG can have at most n(n-1)/2 edges
-      const maxLinks = Math.min(5, Math.floor(nodes.length * (nodes.length - 1) / 2) - nodes.length + 1);
-      
-      for (let i = 0; i < maxLinks; i++) {
-        // Choose source and target nodes that maintain the acyclic property
-        // (source always has a lower index than target)
-        const sourceIndex = Math.floor(Math.random() * (nodes.length - 2));
-        const targetIndex = sourceIndex + 2 + Math.floor(Math.random() * (nodes.length - sourceIndex - 2));
-        
-        if (targetIndex < nodes.length) {
-          // Check if this link already exists
-          if (!links.some(link => link.source === nodes[sourceIndex].id && link.target === nodes[targetIndex].id)) {
-            links.push({
-              source: nodes[sourceIndex].id,
-              target: nodes[targetIndex].id,
-              value: 0.5
-            });
-          }
-        }
-      }
+    // Clear previous SVG content
+    d3.select(d3Container.current).selectAll("*").remove();
 
-      // Set up dimensions
-      const width = 800;
-      const height = 600;
-      const margin = { top: 40, right: 40, bottom: 40, left: 40 };
-      const innerWidth = width - margin.left - margin.right;
-      const innerHeight = height - margin.top - margin.bottom;
-      
-      // Create SVG
-      const svg = d3.select(d3Container.current)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height)
-        .append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-      
-      // Set up force simulation
-      const simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links)
-          .id(d => d.id)
-          .distance(100)
-        )
-        .force('charge', d3.forceManyBody().strength(-200))
-        .force('center', d3.forceCenter(innerWidth / 2, innerHeight / 2))
-        .force('x', d3.forceX(innerWidth / 2).strength(0.1))
-        .force('y', d3.forceY(innerHeight / 2).strength(0.1));
-      
-      // Define arrow markers for the links
-      svg.append('defs').append('marker')
-        .attr('id', 'arrowhead')
-        .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 20)
-        .attr('refY', 0)
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
-        .attr('orient', 'auto')
-        .append('path')
-        .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', '#999');
-      
-      // Create links
-      const link = svg.append('g')
-        .selectAll('line')
-        .data(links)
-        .join('line')
-        .attr('stroke', '#999')
-        .attr('stroke-opacity', 0.6)
-        .attr('stroke-width', d => Math.sqrt(d.value) * 2)
-        .attr('marker-end', 'url(#arrowhead)');
-      
-      // Create a group for each node
-      const node = svg.append('g')
-        .selectAll('.node')
-        .data(nodes)
-        .join('g')
-        .attr('class', 'node')
-        .call(d3.drag()
-          .on('start', dragstarted)
-          .on('drag', dragged)
-          .on('end', dragended)
-        );
-      
-      // Add circles for nodes
-      node.append('circle')
-        .attr('r', d => 5 + Math.sqrt(d.value) * 0.5)
-        .attr('fill', d => d3.interpolateBlues(d.value / d3.max(nodes, n => n.value)))
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1.5);
-      
-      // Add text labels
-      node.append('text')
-        .attr('dx', 12)
-        .attr('dy', '.35em')
-        .text(d => d.name)
-        .style('font-size', '10px')
-        .style('pointer-events', 'none');
-      
-      // Add tooltips
-      const tooltip = d3.select(d3Container.current)
-        .append('div')
-        .attr('class', 'tooltip')
-        .style('opacity', 0)
-        .style('position', 'absolute')
-        .style('background-color', 'white')
-        .style('border', 'solid')
-        .style('border-width', '1px')
-        .style('border-radius', '5px')
-        .style('padding', '10px');
-      
-      // Add hover interactions
-      node
-        .on('mouseover', function(event, d) {
-          // Highlight connected links
-          link
-            .attr('stroke', l => (l.source.id === d.id || l.target.id === d.id) ? '#333' : '#999')
-            .attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.6)
-            .attr('stroke-width', l => (l.source.id === d.id || l.target.id === d.id) ? Math.sqrt(l.value) * 3 : Math.sqrt(l.value) * 2);
-          
-          // Highlight connected nodes
-          node.select('circle')
-            .attr('fill', n => (n.id === d.id || links.some(l => (l.source.id === d.id && l.target.id === n.id) || (l.target.id === d.id && l.source.id === n.id))) 
-              ? d3.rgb(d3.interpolateBlues(n.value / d3.max(nodes, n => n.value))).darker(0.5) 
-              : d3.interpolateBlues(n.value / d3.max(nodes, n => n.value)))
-            .attr('r', n => (n.id === d.id) ? 8 + Math.sqrt(n.value) * 0.5 : 5 + Math.sqrt(n.value) * 0.5);
-          
-          tooltip
-            .style('opacity', 1)
-            .html(`<strong>${d.name}</strong><br>Value: ${d.value}`)
-            .style('left', (event.pageX + 10) + 'px')
-            .style('top', (event.pageY - 15) + 'px');
-        })
-        .on('mousemove', function(event) {
-          tooltip
-            .style('left', (event.pageX + 10) + 'px')
-            .style('top', (event.pageY - 15) + 'px');
-        })
-        .on('mouseleave', function(event, d) {
-          // Reset link styles
-          link
-            .attr('stroke', '#999')
-            .attr('stroke-opacity', 0.6)
-            .attr('stroke-width', d => Math.sqrt(d.value) * 2);
-          
-          // Reset node styles
-          node.select('circle')
-            .attr('fill', d => d3.interpolateBlues(d.value / d3.max(nodes, n => n.value)))
-            .attr('r', d => 5 + Math.sqrt(d.value) * 0.5);
-          
-          tooltip.style('opacity', 0);
-        });
-      
-      // Update positions on each simulation tick
-      simulation.on('tick', () => {
-        link
-          .attr('x1', d => d.source.x)
-          .attr('y1', d => d.source.y)
-          .attr('x2', d => d.target.x)
-          .attr('y2', d => d.target.y);
-        
-        node
-          .attr('transform', d => `translate(${d.x},${d.y})`);
-      });
-      
-      // Drag functions
-      function dragstarted(event, d) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-      }
-      
-      function dragged(event, d) {
-        d.fx = event.x;
-        d.fy = event.y;
-      }
-      
-      function dragended(event, d) {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
-      }
+    // Set dimensions and margins
+    const margin = { top: 40, right: 10, bottom: 10, left: 10 };
+    const width = d3Container.current.clientWidth - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
+
+    // Create SVG
+    const svg = d3.select(d3Container.current)
+      .append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Add title
+    svg.append('text')
+      .attr('x', width / 2)
+      .attr('y', -margin.top / 2)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '16px')
+      .attr('font-weight', 'bold')
+      .text(chartTitle);
+
+    // Create simulation
+    const simulation = d3.forceSimulation(chartData.nodes)
+      .force("link", d3.forceLink(chartData.links).id(d => d.id).distance(100))
+      .force("charge", d3.forceManyBody().strength(-300))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collision", d3.forceCollide().radius(50));
+
+    // Create color scale
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    // Create links
+    const link = svg.append("g")
+      .selectAll("line")
+      .data(chartData.links)
+      .join("line")
+      .attr("stroke", "#999")
+      .attr("stroke-opacity", 0.6)
+      .attr("stroke-width", d => Math.sqrt(d.value));
+
+    // Create nodes
+    const node = svg.append("g")
+      .selectAll("g")
+      .data(chartData.nodes)
+      .join("g")
+      .call(d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended));
+
+    // Add circles to nodes
+    node.append("circle")
+      .attr("r", d => Math.sqrt(d.value) * 5 + 5)
+      .attr("fill", d => color(d.id))
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 1.5)
+      .style("cursor", "pointer");
+
+    // Add labels to nodes
+    node.append("text")
+      .attr("dy", ".35em")
+      .attr("text-anchor", "middle")
+      .text(d => d.name)
+      .style("font-size", "10px")
+      .style("pointer-events", "none");
+
+    // Add tooltips
+    const tooltip = d3.select(d3Container.current)
+      .append('div')
+      .style('opacity', 0)
+      .attr('class', 'tooltip')
+      .style('background-color', 'white')
+      .style('border', 'solid')
+      .style('border-width', '1px')
+      .style('border-radius', '5px')
+      .style('padding', '10px')
+      .style('position', 'absolute');
+
+    node.on('mouseover', function(event, d) {
+      tooltip
+        .style('opacity', 1)
+        .html(`
+          <strong>${d.name}</strong><br/>
+          Value: ${d.value.toLocaleString()}
+        `)
+        .style('left', (event.pageX + 10) + 'px')
+        .style('top', (event.pageY - 28) + 'px');
+    })
+    .on('mouseout', function() {
+      tooltip.style('opacity', 0);
+    });
+
+    // Update positions on each tick
+    simulation.on("tick", () => {
+      link
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+      node.attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+    // Drag functions
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
     }
-  }, [chartData, loading, error]);
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+
+  }, [chartData, chartTitle]);
 
   if (loading) {
-    return <div className="chart-loading">Processing data for directed acyclic graph...</div>;
+    return <div className="chart-loading">Processing data for DAG visualization...</div>;
   }
 
   if (error) {
     return (
       <div className="chart-error">
-        <div className="error-message">{error}</div>
-        <div className="debug-info">
-          <h4>Debug data:</h4>
-          <pre>{typeof data === 'object' ? JSON.stringify(data, null, 2).substring(0, 300) : 'No data'}</pre>
-          <h4>Query text (sample):</h4>
-          <pre>
-            {typeof query === 'string' ? query.substring(0, 300) : 
-             typeof query === 'object' && query.response ? query.response.substring(0, 300) : 
-             'No query text'}
-          </pre>
-        </div>
+        <p>{error}</p>
       </div>
     );
   }
 
   return (
     <div className="chart-container">
-      <h3 className="chart-title">{chartTitle}</h3>
-      {dataSource && dataSource !== 'sample' && (
-        <div className="chart-source">Data source: {dataSource}</div>
-      )}
-      <div className="d3-container" ref={d3Container} />
+      <div ref={d3Container} style={{ width: '100%', height: '400px' }}></div>
     </div>
   );
 };

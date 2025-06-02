@@ -167,8 +167,10 @@ const PolarArea = ({ data, query }) => {
           return angle < Math.PI / 2 || angle > Math.PI * 3 / 2 ? 'start' : 'end';
         })
         .text(d => d.name.length > 12 ? d.name.substring(0, 12) + '...' : d.name)
-        .style('font-size', '10px')
-        .style('fill', '#333');
+        .style('font-size', `${Math.max(10, 16 - Math.floor(chartData.length / 10))}px`)
+        .style('fill', '#333')
+        .append('title')
+        .text(d => d.name);
       
       // Add tooltips
       const tooltip = d3.select(d3Container.current)
