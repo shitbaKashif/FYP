@@ -6,6 +6,7 @@ import json
 import traceback
 from crontab import CronTab
 import os
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)  # Enable cross-origin requests
@@ -31,6 +32,19 @@ def load_subreddit_data():
                 "pointless", "awakens", "tulsi"
             ]
         }
+
+# Add this helper function at the top (or near your imports)
+def convert_numpy_types(obj):
+    if isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(i) for i in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_numpy_types(i) for i in obj)
+    elif isinstance(obj, np.generic):
+        return obj.item()
+    else:
+        return obj
 
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
@@ -69,7 +83,8 @@ def visualize_endpoint():
     try:
         # Get visualization recommendations
         recommended_charts = vrs.getViz(user_query, response)
-        return jsonify(recommended_charts)
+        print(recommended_charts)
+        return jsonify(convert_numpy_types(recommended_charts))
     except Exception as e:
         print(f"Error in visualize endpoint: {str(e)}")
         traceback.print_exc()
